@@ -1,0 +1,1891 @@
+type: edu
+files:
+- name: src/account/AccountServiceApplication.java
+  visible: true
+  text: |-
+    package account;
+
+    import org.springframework.boot.SpringApplication;
+    import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+    @SpringBootApplication
+    public class AccountServiceApplication {
+        public static void main(String[] args) {
+            SpringApplication.run(AccountServiceApplication.class, args);
+        }
+    }
+  learner_created: false
+- name: src/account/service/AccountService.java
+  visible: true
+  text: |
+    package account.service;
+
+    import org.springframework.stereotype.Service;
+
+    @Service
+    public class AccountService {
+
+    }
+  learner_created: false
+- name: src/account/model/User.java
+  visible: true
+  text: |
+    package account.model;
+
+    import com.fasterxml.jackson.annotation.JsonIgnore;
+    import com.fasterxml.jackson.annotation.JsonProperty;
+    import lombok.*;
+    import org.hibernate.annotations.Fetch;
+    import org.hibernate.annotations.FetchMode;
+    import org.hibernate.annotations.Proxy;
+    import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
+    import javax.persistence.*;
+    import javax.validation.constraints.NotEmpty;
+    import javax.validation.constraints.NotNull;
+    import javax.validation.constraints.Pattern;
+    import javax.validation.constraints.Size;
+    import java.util.*;
+
+    @ToString
+    @RequiredArgsConstructor
+    @Entity
+    //@Data
+    @Proxy(lazy = false)
+    public class User {
+        @Id
+        @GeneratedValue(strategy = GenerationType.IDENTITY)
+        @Column(name = "user_id", nullable = false)
+        @JsonProperty("id")
+        private Long id;
+
+        @NotNull
+        @NotEmpty
+        @Column(name = "name")
+        @JsonProperty("name")
+        private String name;
+
+        @NotNull
+        @NotEmpty
+        @Column(name = "last_name")
+        @JsonProperty("lastname")
+        private String lastname;
+
+        @NotNull
+        @NotEmpty
+        @Pattern(regexp = "\\w+@acme.com", message = "Invalid email")
+        @Column(name = "email")
+        @JsonProperty("email")
+        private String email;
+
+        @NotNull
+        @NotEmpty
+        @JsonProperty("password")
+        @JsonIgnore
+        @Column(name = "password")
+        @Size(min = 12)
+        private String password;
+
+        @Column(name = "role")
+        @ElementCollection(fetch = FetchType.EAGER)
+        @JsonIgnore
+        private Set<String> role = new HashSet<>();
+
+        public Long getId() {
+            return id;
+        }
+
+        public void setId(Long id) {
+            this.id = id;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getLastname() {
+            return lastname;
+        }
+
+        public void setLastname(String lastname) {
+            this.lastname = lastname;
+        }
+
+        public String getEmail() {
+            return email;
+        }
+
+        public void setEmail(String email) {
+            this.email = email;
+        }
+
+        @JsonIgnore
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
+        }
+
+        public Set<String> getRole() {
+            return role;
+        }
+
+        public void setRole(Set<String> role) {
+            this.role = role;
+        }
+    }
+  learner_created: false
+- name: src/account/model/UserDetailsImpl.java
+  visible: true
+  text: |
+    package account.model;
+
+    import org.springframework.security.core.GrantedAuthority;
+    import org.springframework.security.core.authority.SimpleGrantedAuthority;
+    import org.springframework.security.core.userdetails.UserDetails;
+    import java.util.Collection;
+    import java.util.Locale;
+    import java.util.Set;
+    import java.util.logging.Logger;
+    import java.util.stream.Collectors;
+
+    public class UserDetailsImpl implements UserDetails {
+
+        private final String username;
+        private final String name;
+        private final String lastname;
+        private final String password;
+        private final String email;
+        private final Collection<SimpleGrantedAuthority> authorities;
+
+        public UserDetailsImpl(User user) {
+            this.username = user.getEmail().toLowerCase(Locale.ROOT);
+            this.name = user.getName();
+            this.lastname = user.getLastname();
+            this.password = user.getPassword();
+            this.email = user.getEmail().toLowerCase(Locale.ROOT);
+            Set<String> auth = user.getRole();
+            this.authorities = auth.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toSet());
+        }
+
+        @Override
+        public Collection<? extends GrantedAuthority> getAuthorities() {
+            return authorities;
+        }
+
+        @Override
+        public String getPassword() {
+            return password;
+        }
+
+        @Override
+        public String getUsername() {
+            return username;
+        }
+
+        @Override
+        public boolean isAccountNonExpired() {
+            return true;
+        }
+
+        @Override
+        public boolean isAccountNonLocked() {
+            return true;
+        }
+
+        @Override
+        public boolean isCredentialsNonExpired() {
+            return true;
+        }
+
+        @Override
+        public boolean isEnabled() {
+            return true;
+        }
+
+        public String getLastname() {
+            return lastname;
+        }
+
+        public String getEmail() {
+            return email;
+        }
+
+        public String getName() {
+            return name;
+        }
+    }
+  learner_created: false
+- name: src/account/service/UserDetailsServiceImpl.java
+  visible: true
+  text: |
+    package account.service;
+
+    import account.model.User;
+    import account.model.UserDetailsImpl;
+    import account.repository.UserRepository;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.security.core.userdetails.UserDetails;
+    import org.springframework.security.core.userdetails.UserDetailsService;
+    import org.springframework.security.core.userdetails.UsernameNotFoundException;
+    import org.springframework.stereotype.Service;
+
+    import java.util.Locale;
+    import java.util.Optional;
+
+    @Service
+    public class UserDetailsServiceImpl implements UserDetailsService {
+
+        @Autowired
+        UserRepository userRepo;
+
+        @Override
+        public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+            User user = userRepo.findByEmail(username.toLowerCase(Locale.ROOT)).orElseThrow(() -> new UsernameNotFoundException(username));
+            return new UserDetailsImpl(user);
+        }
+    }
+  learner_created: false
+- name: src/account/repository/UserRepository.java
+  visible: true
+  text: |
+    package account.repository;
+
+    import account.model.User;
+    import org.springframework.data.repository.CrudRepository;
+    import org.springframework.stereotype.Repository;
+    import java.util.Optional;
+
+    @Repository
+    public interface UserRepository extends CrudRepository<User, Long> {
+        Optional<User> findByName(String name);
+        Optional<User> findByEmail(String email);
+        boolean existsByEmail(String email);
+        boolean existsByNameAndLastname(String name, String lastname);
+        boolean existsByRole(String role);
+    }
+  learner_created: false
+- name: src/account/security/SecurityConfig.java
+  visible: true
+  text: |
+    package account.security;
+
+    import account.service.UserDetailsServiceImpl;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.context.annotation.Bean;
+    import org.springframework.http.HttpMethod;
+    import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+    import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+    import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+    import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+    import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+    import org.springframework.security.config.http.SessionCreationPolicy;
+    import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+    import org.springframework.security.crypto.password.PasswordEncoder;
+
+    @EnableWebSecurity
+    public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+        @Autowired
+        UserDetailsServiceImpl userDetailsService;
+
+        @Autowired
+        RestAuthenticationEntryPoint restAuthenticationEntryPoint;
+
+        @Override
+        protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+            auth
+                    .authenticationProvider(authenticationProvider());
+        }
+
+        @Override
+        protected void configure(HttpSecurity http) throws Exception {
+            http
+                    .csrf().disable().headers().frameOptions().disable() // for Postman, the H2 console
+                    .and()
+                    .authorizeRequests() // manage access
+    //                .mvcMatchers(HttpMethod.POST, "/api/auth/changepass").hasAnyRole("USER", "ACCOUNTANT", "ADMIN")
+    //                .mvcMatchers(HttpMethod.GET, "/api/empl/payment").hasAnyRole("USER", "ACCOUNTANT")
+    //                .mvcMatchers( "/api/acct/**").hasAnyRole("ACCOUNTANT")
+    //                .mvcMatchers( "/api/admin/**").hasAnyRole("ADMIN")
+    //                .and()
+    //                .authorizeRequests()
+                    .mvcMatchers(HttpMethod.POST, "/api/auth/changepass").authenticated()
+                    .mvcMatchers(HttpMethod.GET, "/api/empl/payment").authenticated()
+                    .mvcMatchers( "/api/acct/**").authenticated()
+                    .mvcMatchers( "/api/admin/**").authenticated()
+                    .mvcMatchers("/api/auth/signup", "/h2").permitAll()
+                    .and()
+                    .httpBasic()
+                    .authenticationEntryPoint(restAuthenticationEntryPoint) // Handle auth error
+                    .and()
+                    .sessionManagement()
+                    .sessionCreationPolicy(SessionCreationPolicy.STATELESS); // no session
+        }
+
+        @Bean
+        public DaoAuthenticationProvider authenticationProvider(){
+            DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+            provider.setPasswordEncoder(getEncoder());
+            provider.setUserDetailsService(userDetailsService);
+            return provider;
+        }
+
+        @Bean
+        PasswordEncoder getEncoder() {
+            return new BCryptPasswordEncoder();
+        }
+    }
+  learner_created: false
+- name: src/account/controller/UserFunctionalityController.java
+  visible: true
+  text: |
+    package account.controller;
+
+    import account.model.User;
+    import account.repository.UserRepository;
+    import account.service.UserAuthenticationService;
+    import lombok.RequiredArgsConstructor;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.web.bind.annotation.*;
+
+    import java.util.Locale;
+
+    @RestController
+    //@RequiredArgsConstructor
+    @RequestMapping("/api/admin")
+    public class UserFunctionalityController {
+
+        private final UserAuthenticationService service;
+
+        @Autowired
+        public UserFunctionalityController(UserAuthenticationService service) {
+            this.service = service;
+        }
+
+
+        @PutMapping("/role")
+        public void changeRole(@RequestParam String username, @RequestParam String role) {
+            service.addRole(username, role);
+        }
+
+        @DeleteMapping("/user")
+        public void deleteUser() {
+
+        }
+
+        @GetMapping("/user")
+        public void getUsers() {
+
+        }
+    }
+  learner_created: false
+- name: src/account/security/RestAuthenticationEntryPoint.java
+  visible: true
+  text: |
+    package account.security;
+
+    import org.springframework.security.core.AuthenticationException;
+    import org.springframework.security.web.AuthenticationEntryPoint;
+    import org.springframework.stereotype.Component;
+
+    import javax.servlet.ServletException;
+    import javax.servlet.http.HttpServletRequest;
+    import javax.servlet.http.HttpServletResponse;
+    import java.io.IOException;
+
+    @Component
+    public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
+        @Override
+        public void commence(HttpServletRequest request, HttpServletResponse response,
+                             AuthenticationException authException) throws IOException, ServletException {
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, authException.getMessage());
+        }
+    }
+  learner_created: false
+- name: src/account/service/UserAuthenticationService.java
+  visible: true
+  text: |
+    package account.service;
+
+    import account.model.NewPassword;
+    import account.model.User;
+    import account.model.UserDetailsImpl;
+    import account.repository.UserRepository;
+    import org.aspectj.bridge.IMessage;
+    import org.aspectj.bridge.IMessageHolder;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.http.HttpStatus;
+    import org.springframework.security.core.Authentication;
+    import org.springframework.security.core.authority.AuthorityUtils;
+    import org.springframework.security.core.authority.SimpleGrantedAuthority;
+    import org.springframework.security.core.context.SecurityContextHolder;
+    import org.springframework.security.core.userdetails.UserDetails;
+    import org.springframework.security.core.userdetails.UsernameNotFoundException;
+    import org.springframework.security.crypto.password.PasswordEncoder;
+    import org.springframework.stereotype.Component;
+    import org.springframework.stereotype.Service;
+    import org.springframework.web.server.ResponseStatusException;
+
+    import java.util.*;
+    import java.util.stream.Collectors;
+
+    @Service
+    @Component
+    public class UserAuthenticationService {
+
+        @Autowired
+        UserRepository userRepo;
+
+        @Autowired
+        PasswordEncoder passwordEncoder;
+
+        public User signUp(User user) {
+            Set<String> breachedPasswords = Set.of("PasswordForJanuary", "PasswordForFebruary", "PasswordForMarch", "PasswordForApril",
+                    "PasswordForMay", "PasswordForJune", "PasswordForJuly", "PasswordForAugust",
+                    "PasswordForSeptember", "PasswordForOctober", "PasswordForNovember", "PasswordForDecember");
+            boolean corruptedPassword = breachedPasswords.contains(user.getPassword());
+            if (breachedPasswords.contains(user.getPassword())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The password is in the hacker's database!");
+            }
+            if (userRepo.existsByEmail(user.getEmail().toLowerCase(Locale.ROOT))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User exist!");
+            }
+            Set<String> role = new HashSet<>();
+            if (!userRepo.existsByRole("ADMIN")) {
+                role.add("ADMIN");
+            }
+            role.add("USER");
+            user.setRole(role);
+            user.setEmail(user.getEmail().toLowerCase(Locale.ROOT));
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
+            return userRepo.save(user);
+        }
+
+        public User getPayment() {
+            UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder
+                    .getContext().getAuthentication().getPrincipal();
+    //        System.out.println("Hooooo Hoooh: " + userDetails.getUsername());
+            return userRepo.findByEmail(userDetails.getUsername()).orElseThrow(() ->
+                    new ResponseStatusException(HttpStatus.BAD_REQUEST));
+        }
+
+        public void addRole(String username, String role) {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            boolean hasAdminRole = authentication.getAuthorities().stream()
+                    .anyMatch(r -> r.getAuthority().equals("ROLE_ADMIN"));
+            if (!hasAdminRole) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Administrator permissions required!");
+            }
+            User user = userRepo.findByEmail(username).orElseThrow(() -> new UsernameNotFoundException(username));
+            Set<String> newRoles = user.getRole();
+            newRoles.add(role);
+            user.setRole(newRoles);
+            userRepo.save(user);
+        }
+
+        public Map<String, String> changeUserPassword(NewPassword password) {
+
+            Set<String> breachedPasswords = Set.of("PasswordForJanuary", "PasswordForFebruary", "PasswordForMarch", "PasswordForApril",
+                    "PasswordForMay", "PasswordForJune", "PasswordForJuly", "PasswordForAugust",
+                    "PasswordForSeptember", "PasswordForOctober", "PasswordForNovember", "PasswordForDecember");
+            if (breachedPasswords.contains(password.getPassword())) {
+                System.out.println("breached pass: " + password.getPassword());
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The password is in the hacker's database!");
+            }
+            UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
+                    .getAuthentication().getPrincipal();
+            User user = userRepo.findByEmail(userDetails.getUsername()).orElseThrow();
+            if (passwordEncoder.matches(password.getPassword(), user.getPassword())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The passwords must be different!");
+            }
+            user.setPassword(passwordEncoder.encode(password.getPassword()));
+            User savedUser = userRepo.save(user);
+            return Map.of("email", savedUser.getEmail(), "status", "The password has been updated successfully");
+        }
+    }
+  learner_created: false
+- name: src/account/controller/AuthenticationController.java
+  visible: true
+  text: |
+    package account.controller;
+
+    import account.model.NewPassword;
+    import account.model.User;
+    import account.service.UserAuthenticationService;
+    import lombok.AllArgsConstructor;
+    import lombok.NoArgsConstructor;
+    import lombok.RequiredArgsConstructor;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.web.bind.annotation.PostMapping;
+    import org.springframework.web.bind.annotation.RequestBody;
+    import org.springframework.web.bind.annotation.RequestMapping;
+    import org.springframework.web.bind.annotation.RestController;
+    import javax.validation.Valid;
+    import javax.validation.constraints.NotNull;
+    import java.util.Map;
+
+    @RestController
+    @RequestMapping("/api/auth")
+    public class AuthenticationController {
+
+        private final UserAuthenticationService userAuthService;
+
+        @Autowired
+        public AuthenticationController(UserAuthenticationService userAuthService) {
+            this.userAuthService = userAuthService;
+        }
+
+        @PostMapping("/signup")
+        public User signup(@Valid @NotNull @RequestBody User user) {
+            return userAuthService.signUp(user);
+        }
+
+        @PostMapping("/changepass")
+        public Map<String, String> changePass(@Valid @RequestBody NewPassword newPassword) {
+            return userAuthService.changeUserPassword(newPassword);
+        }
+    }
+  learner_created: false
+- name: test/AccountServiceTest.java
+  visible: false
+  text: |-
+    import account.AccountServiceApplication;
+    import com.fasterxml.jackson.annotation.JsonInclude;
+    import com.fasterxml.jackson.core.JsonProcessingException;
+    import com.fasterxml.jackson.databind.ObjectMapper;
+    import com.google.gson.JsonArray;
+    import com.google.gson.JsonElement;
+    import com.google.gson.JsonObject;
+    import com.google.gson.JsonParser;
+    import org.hyperskill.hstest.dynamic.DynamicTest;
+    import org.hyperskill.hstest.dynamic.input.DynamicTesting;
+    import org.hyperskill.hstest.exception.outcomes.UnexpectedError;
+    import org.hyperskill.hstest.exception.outcomes.WrongAnswer;
+    import org.hyperskill.hstest.mocks.web.request.HttpRequest;
+    import org.hyperskill.hstest.mocks.web.response.HttpResponse;
+    import org.hyperskill.hstest.stage.SpringTest;
+    import org.hyperskill.hstest.testcase.CheckResult;
+    import org.springframework.http.HttpStatus;
+
+    import java.util.ArrayList;
+    import java.util.LinkedHashMap;
+    import java.util.List;
+    import java.util.Map;
+    import java.util.stream.Collectors;
+
+    import static org.hyperskill.hstest.common.JsonUtils.getJson;
+    import static org.hyperskill.hstest.common.JsonUtils.getPrettyJson;
+    import static org.hyperskill.hstest.testing.expect.Expectation.expect;
+    import static org.hyperskill.hstest.testing.expect.json.JsonChecker.*;
+
+    class TestReq {
+
+      private Map<String, Object> properties = new LinkedHashMap<>();
+
+      // Deep copy
+      public TestReq(TestReq another) {
+        this.properties = another.properties.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+      }
+
+      public TestReq() {
+      }
+
+      public String toJson() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+        try {
+          return mapper.writeValueAsString(this.properties);
+        } catch (JsonProcessingException e) {
+          System.out.println(e.getMessage());
+          return null;
+        }
+      }
+
+      public TestReq setProps(String key, Object value) {
+        properties.put(key, value);
+        return this;
+      }
+
+    }
+    public class AccountServiceTest extends SpringTest {
+
+      private  final String signUpApi = "/api/auth/signup";
+      private  final String changePassApi = "/api/auth/changepass";
+      private  final String getEmployeePaymentApi = "/api/empl/payment";
+      private final String postPaymentApi = "/api/acct/payments";
+      private final String putRoleApi = "/api/admin/user/role";
+      private final String putAccessApi = "/api/admin/user/access";
+      private final String adminApi = "/api/admin/user/";
+      private final String auditorApi = "/api/security/events/";
+
+      static String[] breachedPass= new String[]{"PasswordForJanuary", "PasswordForFebruary", "PasswordForMarch",
+              "PasswordForApril", "PasswordForMay", "PasswordForJune",
+              "PasswordForJuly", "PasswordForAugust", "PasswordForSeptember",
+              "PasswordForOctober", "PasswordForNovember", "PasswordForDecember"};
+
+      List<Integer> userIdList = new ArrayList<>();
+
+      private final TestReq ivanIvanov = new TestReq().setProps("name", "Ivan")
+              .setProps("lastname", "Ivanov")
+              .setProps("email", "IvanIvanov@acme.com")
+              .setProps("password", "rXoa4CvqpLxW");
+      private final TestReq petrPetrov = new TestReq().setProps("name", "Petr")
+              .setProps("lastname", "Petrov")
+              .setProps("email", "PetrPetrov@acme.com")
+              .setProps("password", "nWza98hjkLPE");
+      private final TestReq johnDoe = new TestReq().setProps("name", "John")
+              .setProps("lastname", "Doe")
+              .setProps("email", "JohnDoe@acme.com")
+              .setProps("password", "oMoa3VvqnLxW");
+      private final TestReq maxMus = new TestReq().setProps("name", "Max")
+              .setProps("lastname", "Mustermann")
+              .setProps("email", "MaxMustermann@acme.com")
+              .setProps("password", "ai0y9bMvyF6G");
+      private final TestReq captainNemo = new TestReq().setProps("name", "Captain")
+              .setProps("lastname", "Nemo")
+              .setProps("email", "nautilus@pompilius.com")
+              .setProps("password", "wings");
+
+      private final String ivanIvanovCorrectUser = ivanIvanov.toJson();
+      private final String petrPetrovCorrectUser = petrPetrov.toJson();
+      private final String jDCorrectUser = johnDoe.toJson();
+      private final String maxMusCorrectUser = maxMus.toJson();
+      private final String maxMusLower = new TestReq(maxMus).setProps("email", "maxmustermann@acme.com").toJson();
+      private final String maxMusWrongPassword = new TestReq(maxMus).setProps("password", "none").toJson();
+      private final String maxMusWrongEmail = new TestReq(maxMus).setProps("email", "maxmustermann@google.com").toJson();
+      private final String captainNemoWrongUser = captainNemo.toJson();
+      private final String jDNewPass = new TestReq(johnDoe).setProps("password", "aNob5VvqzRtb").toJson();
+      private final String jDPass = new TestReq().setProps("new_password", "aNob5VvqzRtb").toJson();
+
+      private final String firstResponseAdminApi = convert(new String[]{
+              new TestReq().setProps("id", 1).setProps("name", "John").setProps("lastname", "Doe")
+                      .setProps("email", "johndoe@acme.com").setProps("roles", new String[] {"ROLE_ADMINISTRATOR"}).toJson(),
+              new TestReq().setProps("id", 2).setProps("name", "Ivan").setProps("lastname", "Ivanov")
+                      .setProps("email", "ivanivanov@acme.com")
+                      .setProps("roles", new String[] {"ROLE_AUDITOR", "ROLE_USER"}).toJson(),
+              new TestReq().setProps("id", 3).setProps("name", "Max").setProps("lastname", "Mustermann")
+                      .setProps("email", "maxmustermann@acme.com").setProps("roles", new String[] {"ROLE_USER"}).toJson()
+      });
+
+      private final String auditorResponseApi = convert(new String[]{
+              new TestReq().setProps("action", "CREATE_USER").setProps("subject", "Anonymous")
+                      .setProps("object", "johndoe@acme.com").setProps("path", "/api/auth/signup").toJson(),
+              new TestReq().setProps("action", "CREATE_USER").setProps("subject", "Anonymous")
+                      .setProps("object", "ivanivanov@acme.com").setProps("path", "/api/auth/signup").toJson(),
+              new TestReq().setProps("action", "GRANT_ROLE").setProps("subject", "johndoe@acme.com")
+                      .setProps("object", "Grant role AUDITOR to ivanivanov@acme.com").setProps("path", "/api/admin/user/role").toJson(),
+              new TestReq().setProps("action", "CREATE_USER").setProps("subject", "Anonymous")
+                      .setProps("object", "maxmustermann@acme.com").setProps("path", "/api/auth/signup").toJson(),
+              new TestReq().setProps("action", "CREATE_USER").setProps("subject", "Anonymous")
+                      .setProps("object", "petrpetrov@acme.com").setProps("path", "/api/auth/signup").toJson(),
+              new TestReq().setProps("action", "LOGIN_FAILED").setProps("subject", "maxmustermann@acme.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "LOGIN_FAILED").setProps("subject", "maxmustermann@google.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "LOGIN_FAILED").setProps("subject", "nautilus@pompilius.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "GRANT_ROLE").setProps("subject", "johndoe@acme.com")
+                      .setProps("object", "Grant role ACCOUNTANT to petrpetrov@acme.com").setProps("path", "/api/admin/user/role").toJson(),
+              new TestReq().setProps("action", "REMOVE_ROLE").setProps("subject", "johndoe@acme.com")
+                      .setProps("object", "Remove role ACCOUNTANT from petrpetrov@acme.com").setProps("path", "/api/admin/user/role").toJson(),
+              new TestReq().setProps("action", "DELETE_USER").setProps("subject", "johndoe@acme.com")
+                      .setProps("object", "petrpetrov@acme.com").setProps("path", "/api/admin/user").toJson(),
+              new TestReq().setProps("action", "CHANGE_PASSWORD").setProps("subject", "johndoe@acme.com")
+                      .setProps("object", "johndoe@acme.com").setProps("path", "/api/auth/changepass").toJson(),
+              new TestReq().setProps("action", "ACCESS_DENIED").setProps("subject", "ivanivanov@acme.com")
+                      .setProps("object", "/api/admin/user/role").setProps("path", "/api/admin/user/role").toJson(),
+              new TestReq().setProps("action", "ACCESS_DENIED").setProps("subject", "ivanivanov@acme.com")
+                      .setProps("object", "/api/admin/user").setProps("path", "/api/admin/user").toJson(),
+              new TestReq().setProps("action", "ACCESS_DENIED").setProps("subject", "ivanivanov@acme.com")
+                      .setProps("object", "/api/admin/user").setProps("path", "/api/admin/user").toJson(),
+              new TestReq().setProps("action", "ACCESS_DENIED").setProps("subject", "johndoe@acme.com")
+                      .setProps("object", "/api/acct/payments").setProps("path", "/api/acct/payments").toJson(),
+              new TestReq().setProps("action", "ACCESS_DENIED").setProps("subject", "maxmustermann@acme.com")
+                      .setProps("object", "/api/acct/payments").setProps("path", "/api/acct/payments").toJson(),
+              new TestReq().setProps("action", "ACCESS_DENIED").setProps("subject", "johndoe@acme.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "ACCESS_DENIED").setProps("subject", "johndoe@acme.com")
+                      .setProps("object", "/api/security/events").setProps("path", "/api/security/events").toJson(),
+              new TestReq().setProps("action", "LOGIN_FAILED").setProps("subject", "maxmustermann@acme.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "LOGIN_FAILED").setProps("subject", "maxmustermann@acme.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "LOGIN_FAILED").setProps("subject", "maxmustermann@acme.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "LOGIN_FAILED").setProps("subject", "maxmustermann@acme.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "LOGIN_FAILED").setProps("subject", "maxmustermann@acme.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "BRUTE_FORCE").setProps("subject", "maxmustermann@acme.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "LOCK_USER").setProps("subject", "maxmustermann@acme.com")
+                      .setProps("object", "Lock user maxmustermann@acme.com").setProps("path", "/api/admin/user/access").toJson(), // api !!!
+              new TestReq().setProps("action", "UNLOCK_USER").setProps("subject", "johndoe@acme.com")
+                      .setProps("object", "Unlock user maxmustermann@acme.com").setProps("path", "/api/admin/user/access").toJson(), // api !!!
+              new TestReq().setProps("action", "LOGIN_FAILED").setProps("subject", "maxmustermann@acme.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "LOGIN_FAILED").setProps("subject", "maxmustermann@acme.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "LOGIN_FAILED").setProps("subject", "maxmustermann@acme.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "LOGIN_FAILED").setProps("subject", "maxmustermann@acme.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "LOGIN_FAILED").setProps("subject", "maxmustermann@acme.com")
+                      .setProps("object", "/api/empl/payment").setProps("path", "/api/empl/payment").toJson(),
+              new TestReq().setProps("action", "UNLOCK_USER").setProps("subject", "johndoe@acme.com")
+                      .setProps("object", "Unlock user maxmustermann@acme.com").setProps("path", "/api/admin/user/access").toJson() // api !!!
+      });
+
+      public AccountServiceTest() {
+        super(AccountServiceApplication.class, "../service_db.mv.db");
+      }
+
+      private String convert(String[] trs) {
+        JsonArray  jsonArray = new JsonArray();
+        for (String tr : trs) {
+          JsonElement jsonObject = JsonParser.parseString(tr);
+          jsonArray.add(jsonObject);
+        }
+        return jsonArray.toString();
+      }
+
+      CheckResult testApi(String user, String body, int status, String api, String method, String message) {
+
+        HttpResponse response = checkResponseStatus(user, body, status, api, method, message);
+
+
+        return CheckResult.correct();
+      }
+
+      /**
+       * Method for checking response on Post request for signup API
+       *
+       * @param body string representation of body content in JSON format (String)
+       * @param status required http status for response (int)
+       * @return instance of CheckResult class containing result of checks (CheckResult)
+       */
+      CheckResult testPostSignUpResponse(String body, int status, String[] role) {
+
+        HttpResponse response = checkResponseStatus(null, body, status, signUpApi, "POST", "");
+
+        JsonObject rightResponse = getJson(body).getAsJsonObject();
+        rightResponse.remove("password");
+
+        // Check is it JSON in response or something else
+        if (!response.getJson().isJsonObject()) {
+          return CheckResult.wrong("Wrong object in response, expected JSON but was \n" +
+                  response.getContent().getClass());
+
+        }
+
+        JsonObject jsonResponse = response.getJson().getAsJsonObject();
+
+        // Check if password is presence in response
+        if (jsonResponse.get("password") != null) {
+          return CheckResult.wrong("You must remove password from response\n" +
+                  jsonResponse);
+        }
+
+        if (!jsonResponse.get("email").getAsString().endsWith("@acme.com")) {
+          return CheckResult.wrong("Service must accept only corporate emails that end with @acme.com\n" +
+                  jsonResponse);
+        }
+
+        if (jsonResponse.get("id") == null) {
+          return CheckResult.wrong("Response must contain user ID\n" +
+                  "Received response:\n" +
+                  jsonResponse);
+        }
+
+        if (userIdList.contains(jsonResponse.get("id").getAsInt())) {
+          return CheckResult.wrong("User ID must be unique!\n" +
+                  "Received response:\n" +
+                  jsonResponse);
+        }
+        rightResponse.addProperty("id", jsonResponse.get("id").toString());
+        // Check JSON in response
+        expect(response.getContent()).asJson().check(
+                isObject()
+                        .value("id", isInteger())
+                        .value("name", rightResponse.get("name").getAsString())
+                        .value("lastname", rightResponse.get("lastname").getAsString())
+                        .value("email", rightResponse.get("email").getAsString().toLowerCase())
+                        .value("roles", role));
+        userIdList.add(jsonResponse.get("id").getAsInt());
+        return CheckResult.correct();
+      }
+
+      /**
+       * Method for restarting application
+       *
+       */
+      private CheckResult restartApplication() {
+        try {
+          reloadSpring();
+        } catch (Exception ex) {
+          throw new UnexpectedError(ex.getMessage());
+        }
+        return CheckResult.correct();
+      }
+
+      /**
+       * Method for checking authentication
+       *
+       * @param user string representation of user information in JSON format (String)
+       * @param status required http status for response (int)
+       * @param message hint about reason of error (String)
+       * @return instance of CheckResult class containing result of checks (CheckResult)
+       */
+      private CheckResult testUserRegistration(String user, int status, String message) {
+
+        HttpResponse response = checkResponseStatus(user, "", status, getEmployeePaymentApi, "GET", message);
+
+        return CheckResult.correct();
+      }
+
+      CheckResult testChangePassword(String api, String body, int status, String user) {
+        JsonObject userJson = getJson(user).getAsJsonObject();
+
+        HttpResponse response = checkResponseStatus(user, body, status, api, "POST", "");
+
+        // Check JSON in response
+        if (status == 200) {
+          expect(response.getContent()).asJson().check(
+                  isObject()
+                          .value("email", userJson.get("email").getAsString().toLowerCase())
+                          .value("status", "The password has been updated successfully"));
+        }
+        return CheckResult.correct();
+      }
+
+      private CheckResult testGetAdminApi(String api, int status, String user, String answer, String message) {
+
+        HttpResponse response = checkResponseStatus(user, "", status, api, "GET", message);
+
+        JsonArray correctJson = getJson(answer).getAsJsonArray();
+        JsonArray responseJson = getJson(response.getContent()).getAsJsonArray();
+
+        if (responseJson.size() == 0)  {
+          return CheckResult.wrong("No data in response body" + "\n"
+                  + "in response " + getPrettyJson(responseJson)  + "\n"
+                  + "must be " + getPrettyJson(correctJson));
+        }
+
+        // Check JSON in response
+        if (response.getStatusCode() == 200) {
+          for (int i = 0; i < responseJson.size(); i++) {
+
+            String[] roles = new String[correctJson.get(i).getAsJsonObject().getAsJsonArray("roles").size()];
+            for(int j=0; j<correctJson.get(i).getAsJsonObject().getAsJsonArray("roles").size(); j++) {
+              roles[j]=correctJson.get(i).getAsJsonObject().getAsJsonArray("roles").get(j).getAsString();
+            }
+
+            expect(responseJson.get(i).getAsJsonObject().toString()).asJson()
+                    .check(isObject()
+                            .value("id", isInteger())
+                            .value("name", correctJson.get(i).getAsJsonObject().get("name").getAsString())
+                            .value("lastname", correctJson.get(i).getAsJsonObject().get("lastname").getAsString())
+                            .value("email", correctJson.get(i).getAsJsonObject().get("email").getAsString())
+                            .value("roles", isArray( roles )));
+          }
+        }
+        return CheckResult.correct();
+      }
+
+      CheckResult testPutAdminApi(String api, HttpStatus status, String user, String reqUser,
+                                  String role, String operation, String[] respRoles, String message) {
+
+        JsonObject jsonUser = getJson(reqUser).getAsJsonObject();
+        JsonObject request = new JsonObject();
+        request.addProperty("user", jsonUser.get("email").getAsString());
+        request.addProperty("operation", operation);
+        request.addProperty("role", role);
+
+        HttpResponse response = checkResponseStatus(user, request.toString(), status.value(), api, "PUT", message);
+
+        // Check JSON in response
+        if (response.getStatusCode() == 200) {
+          expect(response.getContent()).asJson()
+                  .check(isObject()
+                          .value("id", isInteger())
+                          .value("name", jsonUser.get("name").getAsString())
+                          .value("lastname", jsonUser.get("lastname").getAsString())
+                          .value("email", jsonUser.get("email").getAsString().toLowerCase())
+                          .value("roles", isArray(respRoles)));
+        }
+
+        if (response.getStatusCode() != 200) {
+          expect(response.getContent()).asJson().check(
+                  isObject()
+                          .value("error", status.getReasonPhrase())
+                          .value("path", api)
+                          .value("status", status.value())
+                          .value("message", respRoles[0])
+                          .anyOtherValues());
+        }
+        return CheckResult.correct();
+      }
+
+      CheckResult testPutAccessApi(String api, HttpStatus status, String user, String reqUser,
+                                   String operation, String answer, String message) {
+
+        JsonObject jsonUser = getJson(reqUser).getAsJsonObject();
+        JsonObject request = new JsonObject();
+        request.addProperty("user", jsonUser.get("email").getAsString());
+        request.addProperty("operation", operation);
+
+        HttpResponse response = checkResponseStatus(user, request.toString(), status.value(), api, "PUT", message);
+
+        // Check JSON in response
+
+        if (response.getStatusCode() == 200) {
+          expect(response.getContent()).asJson()
+                  .check(isObject()
+                          .value("status", answer));
+        } else {
+          expect(response.getContent()).asJson()
+                  .check(isObject()
+                          .value("error", status.getReasonPhrase())
+                          .value("path", api)
+                          .value("status", status.value())
+                          .value("message", answer)
+                          .anyOtherValues());
+        }
+
+
+        return CheckResult.correct();
+      }
+
+      CheckResult testLocking(String api, HttpStatus status, String user, String answer, String message) {
+
+        HttpResponse response = checkResponseStatus(user, "", status.value(), api, "GET", message);
+
+        // Check JSON in response
+        if (response.getStatusCode() != 200) {
+          expect(response.getContent()).asJson().check(
+                  isObject()
+                          .value("error", status.getReasonPhrase())
+                          .value("path", api)
+                          .value("status", status.value())
+                          .value("message", answer)
+                          .anyOtherValues());
+        }
+        return CheckResult.correct();
+      }
+
+      CheckResult testRoleModelNegative(String api, String method, HttpStatus status, String user, String body, String message) {
+
+        HttpResponse response = checkResponseStatus(user, body, status.value(), api, method.toUpperCase(), message);
+
+        // Check JSON in response
+        if (response.getStatusCode() != 200) {
+          expect(response.getContent()).asJson().check(
+                  isObject()
+                          .value("error", status.getReasonPhrase())
+                          .value("path", api)
+                          .value("status", status.value())
+                          .value("message", "Access Denied!")
+                          .anyOtherValues());
+        }
+        return CheckResult.correct();
+      }
+
+      private CheckResult testAuditorApi(String api, int status, String user, String answer,
+                                         int position, String message) {
+
+        HttpResponse response = checkResponseStatus(user, "", status, api, "GET", message);
+
+
+        JsonArray correctJson = getJson(answer).getAsJsonArray();
+        JsonArray responseJson = getJson(response.getContent()).getAsJsonArray();
+        if (responseJson.size() == 0) {
+          throw new WrongAnswer("Empty array in response!");
+        }
+
+
+
+        // Check JSON in response
+        if (response.getStatusCode() == 200) {
+          expect(responseJson.get(position).toString()).asJson().check(
+                  isObject()
+                          .value("action", correctJson.get(position).getAsJsonObject().get("action").getAsString())
+                          .value("subject", correctJson.get(position).getAsJsonObject().get("subject").getAsString())
+                          .value("object", isString( o -> o.contains(correctJson.get(position).getAsJsonObject().get("object").getAsString())))
+                          .value("path", isString())
+                          .anyOtherValues());
+
+        }
+        return CheckResult.correct();
+      }
+
+      CheckResult testDeleteAdminApi(String api, HttpStatus status, String user, String param,
+                                     String answer, String message) {
+
+        HttpResponse response = checkResponseStatus(user, "", status.value(),
+                api + param, "DELETE", message);
+
+        // Check JSON in response
+        if (response.getStatusCode() == 200) {
+          expect(response.getContent()).asJson().check(
+                  isObject()
+                          .value("user", param.toLowerCase())
+                          .value("status", answer));
+        }
+
+        if (response.getStatusCode() != 200) {
+          expect(response.getContent()).asJson().check(
+                  isObject()
+                          .value("error", status.getReasonPhrase())
+                          .value("path", api + param)
+                          .value("status", status.value())
+                          .value("message", answer)
+                          .anyOtherValues());
+        }
+        return CheckResult.correct();
+      }
+
+
+      /**
+       * Method for testing api response
+       *
+       * @param user string representation of user information in JSON format (String)
+       * @param body request body (String)
+       * @param status expected response status (int)
+       * @param api testing api (String)
+       * @param method method for api (String)
+       * @param message test hints for student (String)
+       * @return response (HttpResponse)
+       */
+      private HttpResponse checkResponseStatus(String user, String body,
+                                               int status, String api, String method, String message) {
+        HttpRequest request = null;
+        switch (method) {
+          case "GET":
+            request = get(api);
+            break;
+          case "POST":
+            request = post(api, body);
+            break;
+          case "PUT":
+            request = put(api, body);
+            break;
+          case "DELETE":
+            request = delete(api);
+            break;
+        }
+
+        if (user != null) {
+          JsonObject userJson = getJson(user).getAsJsonObject();
+          String password = userJson.get("password").getAsString();
+          String login = userJson.get("email").getAsString().toLowerCase();
+          request = request.basicAuth(login, password);
+        }
+        HttpResponse response = request.send();
+
+        if (response.getStatusCode() != status) {
+          throw new WrongAnswer(method + " " + api  + " should respond with "
+                  + "status code " + status + ", responded: " + response.getStatusCode() + "\n"
+                  + message + "\n"
+                  + "Response body:\n" + response.getContent() + "\n");
+        }
+        return response;
+      }
+
+      @DynamicTest
+      DynamicTesting[] dt = new DynamicTesting[] {
+
+              // Create administrator and auditor
+              () -> testPostSignUpResponse(jDCorrectUser, 200, new String[] {"ROLE_ADMINISTRATOR"}),
+              () -> testPostSignUpResponse(ivanIvanovCorrectUser, 200, new String[] {"ROLE_USER"}),
+              () -> testPutAdminApi(putRoleApi, HttpStatus.OK, jDCorrectUser,
+                      ivanIvanovCorrectUser, "AUDITOR", "GRANT",
+                      new String[] {"ROLE_AUDITOR", "ROLE_USER"}, ""),
+
+              // Testing user registration positive tests
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 0,"'CREATE_USER' security event missing"), // 3
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 1,"'CREATE_USER' security event missing"), // 3
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 2,"'GRANT_ROLE' security event missing"), // 3
+              () -> testPostSignUpResponse(maxMusLower, 200, new String[] {"ROLE_USER"}),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 3,"'CREATE_USER' security event missing"), // 4
+              () -> testPostSignUpResponse(petrPetrovCorrectUser, 200, new String[] {"ROLE_USER"}),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 4,"'CREATE_USER' security event missing"), // 5
+
+    //
+    //          // Test authentication, positive tests
+              () -> testUserRegistration(maxMusLower, 200, "User must login!"),
+              () -> testUserRegistration(maxMusCorrectUser, 200, "Login case insensitive!"),
+    //
+    //          // Test authentication, negative tests
+              () -> testUserRegistration(maxMusWrongPassword, 401, "Wrong password!"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 5,"'LOGIN_FAILED' security event missing"), // 6
+              () -> testUserRegistration(maxMusWrongEmail, 401, "Wrong password!"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 6,"'LOGIN_FAILED' security event missing"), // 7
+              () -> testUserRegistration(captainNemoWrongUser, 401, "Wrong user"),
+              () -> testApi(null, "", 401, getEmployeePaymentApi, "GET",
+                      "This api only for authenticated user"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 7,"'LOGIN_FAILED' security event missing"), // 8
+
+    //          // Testing persistence
+              () -> restartApplication(),
+              () -> testUserRegistration(maxMusCorrectUser, 200, "User must login, after restarting!" +
+                      " Check persistence."),
+
+              // Changing roles
+              () -> testPutAdminApi(putRoleApi, HttpStatus.BAD_REQUEST, jDCorrectUser,
+                      jDCorrectUser, "AUDITOR", "GRANT",
+                      new String[] {"The user cannot combine administrative and business roles!"},
+                      "Trying add administrative role to business user!"),
+              () -> testPutAdminApi(putRoleApi, HttpStatus.OK, jDCorrectUser,
+                      petrPetrovCorrectUser, "ACCOUNTANT", "GRANT",
+                      new String[] {"ROLE_ACCOUNTANT", "ROLE_USER"}, "Trying to add role ACCOUNTANT to user"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 8,"'GRANT_ROLE' security event missing"), // 9
+              () -> testPutAdminApi(putRoleApi, HttpStatus.OK, jDCorrectUser,
+                      petrPetrovCorrectUser, "ACCOUNTANT", "REMOVE",
+                      new String[] {"ROLE_USER"}, "Trying to remove role ACCOUNTANT from user"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 9,"'REMOVE_ROLE' security event missing"), // 10
+
+              //Delete user
+              () -> testDeleteAdminApi("/api/admin/user/", HttpStatus.OK, jDCorrectUser,
+                      "petrpetrov@acme.com", "Deleted successfully!", "Trying to delete user"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 10,"'DELETE_USER' security event missing"), // 11
+
+              // Change password
+              () -> testChangePassword(changePassApi, jDPass, 200, jDCorrectUser),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 11,"'CHANGE_PASSWORD' security event missing"), // 12
+
+              // Testing role model negative case
+              () -> testRoleModelNegative(putRoleApi, "PUT", HttpStatus.FORBIDDEN, ivanIvanovCorrectUser,
+                      "", "Trying to access administrative endpoint with business user"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 12,"'ACCESS_DENIED' security event missing"), // 13
+              () -> testRoleModelNegative(adminApi, "GET", HttpStatus.FORBIDDEN, ivanIvanovCorrectUser,
+                      "", "Trying to access administrative endpoint with business user"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 13,"'ACCESS_DENIED' security event missing"), //14
+              () -> testRoleModelNegative(adminApi, "DELETE", HttpStatus.FORBIDDEN, ivanIvanovCorrectUser,
+                      "", "Trying to access administrative endpoint with business user"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 14,"'ACCESS_DENIED' security event missing"), // 15
+              () -> testRoleModelNegative(postPaymentApi, "POST", HttpStatus.FORBIDDEN, jDNewPass,
+                      "", "Trying to access business endpoint with administrative user"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 15,"'ACCESS_DENIED' security event missing"), // 16
+              () -> testRoleModelNegative(postPaymentApi, "POST", HttpStatus.FORBIDDEN, maxMusCorrectUser,
+                      "", "Trying to access endpoint with wrong role"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 16,"'ACCESS_DENIED' security event missing"), // 17
+              () -> testRoleModelNegative(getEmployeePaymentApi, "GET", HttpStatus.FORBIDDEN, jDNewPass,
+                      "", "Trying to access business endpoint with administrative user"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 17,"'ACCESS_DENIED' security event missing"), // 18
+
+              () -> testRoleModelNegative(auditorApi, "GET", HttpStatus.FORBIDDEN, jDNewPass,
+                      "", "Trying to access business endpoint with administrative user"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 18,"'ACCESS_DENIED' security event missing"), // 19
+
+              // Testing locking user
+              () -> testUserRegistration(maxMusWrongPassword, 401, "Wrong password!"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 19,"'LOGIN_FAILED' security event missing"), // 20
+              () -> testUserRegistration(maxMusWrongPassword, 401, "Wrong password!"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 20,"'LOGIN_FAILED' security event missing"), // 21
+              () -> testUserRegistration(maxMusWrongPassword, 401, "Wrong password!"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 21,"'LOGIN_FAILED' security event missing"), // 22
+              () -> testUserRegistration(maxMusWrongPassword, 401, "Wrong password!"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 22,"'LOGIN_FAILED' security event missing"), // 23
+              () -> testUserRegistration(maxMusWrongPassword, 401, "Wrong password!"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 23,"'LOGIN_FAILED' security event missing"), // 24
+              () -> testLocking(getEmployeePaymentApi, HttpStatus.UNAUTHORIZED, maxMusCorrectUser,
+                      "User account is locked", "User must be locked after 5 attempts with wrong password"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 24,"'BRUTE_FORCE' security event missing"), // 25
+              () -> testPutAccessApi(putAccessApi, HttpStatus.OK, jDNewPass,
+                      maxMusCorrectUser,"UNLOCK",
+                      "User maxmustermann@acme.com unlocked!", "User must be unlocked through admin endpoint"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 25,"'LOCK_USER' security event missing"), // 25
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 26,"'UNLOCK_USER' security event missing"), // 26
+              () -> testUserRegistration(maxMusWrongPassword, 401, "Wrong password!"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 27,"'LOGIN_FAILED' security event missing"), // 27
+              () -> testUserRegistration(maxMusWrongPassword, 401, "Wrong password!"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 28,"'LOGIN_FAILED' security event missing"), // 28
+              () -> testUserRegistration(maxMusWrongPassword, 401, "Wrong password!"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 29,"'LOGIN_FAILED' security event missing"),
+              () -> testUserRegistration(maxMusWrongPassword, 401, "Wrong password!"),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 30,"'LOGIN_FAILED' security event missing"),
+              () -> testUserRegistration(maxMusCorrectUser, 200, "User must login!"),
+              () -> testUserRegistration(maxMusWrongPassword, 401, "Wrong password!"),
+              () -> testUserRegistration(maxMusCorrectUser, 200,
+                      "Counter of failed login attempts must be reset after successfully login!"),
+              () -> testPutAccessApi(putAccessApi, HttpStatus.OK, jDNewPass,
+                      maxMusCorrectUser,"LOCK",
+                      "User maxmustermann@acme.com locked!", ""),
+              () -> testAuditorApi(auditorApi, 200, ivanIvanovCorrectUser,
+                      auditorResponseApi, 31,"'LOCK_USER' security event missing"),
+              () -> testLocking(getEmployeePaymentApi, HttpStatus.UNAUTHORIZED, maxMusCorrectUser,
+                      "User account is locked", "User must be locked through admin endpoint"),
+              () -> testPutAccessApi(putAccessApi, HttpStatus.BAD_REQUEST, jDNewPass,
+                      jDCorrectUser,"LOCK",
+                      "Can't lock the ADMINISTRATOR!", ""),
+              () -> testGetAdminApi(adminApi, 200, jDNewPass,
+                      firstResponseAdminApi, "Api must be available to admin user"),
+
+      };
+
+    }
+  learner_created: false
+- name: src/account/model/UserRole.java
+  visible: true
+  text: |
+    package account.model;
+
+    import lombok.Data;
+    import lombok.Getter;
+    import lombok.Setter;
+
+    import javax.validation.constraints.NotEmpty;
+
+    public class UserRole {
+
+        @NotEmpty
+        private String user;
+        private String role;
+        private String operation;
+
+        public String getUser() {
+            return user;
+        }
+
+        public void setUser(String user) {
+            this.user = user;
+        }
+
+        public String getRole() {
+            return role;
+        }
+
+        public void setRole(String role) {
+            this.role = role;
+        }
+
+        public String getOperation() {
+            return operation;
+        }
+
+        public void setOperation(String operation) {
+            this.operation = operation;
+        }
+    }
+  learner_created: true
+- name: src/account/model/Payment.java
+  visible: true
+  text: |-
+    package account.model;
+
+    import com.fasterxml.jackson.annotation.JsonIgnore;
+    import lombok.Data;
+    import lombok.ToString;
+    import javax.persistence.*;
+    import javax.validation.constraints.*;
+
+    @Entity
+    @ToString
+    public class Payment {
+
+        @Id
+        @GeneratedValue(strategy = GenerationType.IDENTITY)
+        private Long id;
+
+        @NotNull
+        @Pattern(regexp = "\\w+@acme.com")
+        private String employee;    //user email
+
+        @NotNull
+        @Pattern(regexp = "^((0[1-9])|(1[0-2]))-(\\d{4})$", message = "Wrong date!")
+        private String period;
+
+        @NotNull
+        @Min(value = 0, message = "Salary must be non negative!")
+        private Long salary;
+
+    //    @JsonIgnore
+        @Column(unique = true)
+        private String employeePeriod;
+
+        public Long getId() {
+            return id;
+        }
+
+        public void setId(Long id) {
+            this.id = id;
+        }
+
+        public String getEmployee() {
+            return employee;
+        }
+
+        public void setEmployee(String employee) {
+            this.employee = employee;
+        }
+
+        public String getPeriod() {
+            return period;
+        }
+
+        public void setPeriod(String period) {
+            this.period = period;
+        }
+
+        public Long getSalary() {
+            return salary;
+        }
+
+        public void setSalary(Long salary) {
+            this.salary = salary;
+        }
+
+        @JsonIgnore
+        public String getEmployeePeriod() {
+            return employeePeriod;
+        }
+
+        public void setEmployeePeriod(String employeePeriod) {
+            this.employeePeriod = employeePeriod;
+        }
+    }
+  learner_created: true
+- name: src/account/repository/AccountRepo.java
+  visible: true
+  text: |
+    package account.repository;
+
+    import account.model.Payment;
+    import org.springframework.data.jpa.repository.JpaRepository;
+    import org.springframework.stereotype.Repository;
+
+    import javax.transaction.Transactional;
+    import javax.validation.constraints.NotNull;
+    import javax.validation.constraints.Pattern;
+    import java.util.List;
+    import java.util.Optional;
+
+    @Repository
+    public interface AccountRepo extends JpaRepository<Payment, Long> {
+
+        @Override
+        <S extends Payment> List<S> saveAll(Iterable<S> entities);
+        List<Payment> findAllByEmployeeOrderByIdDesc(String employeeEmail);
+        List<Payment> findAllByPeriodAndEmployeeOrderByIdDesc(String period, String name);
+        boolean existsByEmployeePeriod(String employeePeriod);
+        Optional<Payment> findPaymentByEmployeeAndPeriod(String employee, String period);
+    }
+  learner_created: true
+- name: src/account/exception/CustomHttpResponse.java
+  visible: true
+  text: |
+    package account.exception;
+
+    public class CustomHttpResponse {
+        private String timestamp; //       "timestamp": "2021-12-12T09:28:54.267+00:00",
+        private int status;//        "status": 403,
+        private String error;//        "error": "Forbidden",
+        private String message;//        "message": "Forbidden",
+        private String path;//        "path": "/api/admin/user/role"
+
+        public CustomHttpResponse() {}
+        private CustomHttpResponse(String timestamp, int status, String error, String message, String path) {
+            this.timestamp = timestamp;
+            this.status = status;
+            this.error = error;
+            this.message = message;
+            this.path = path;
+        }
+
+        public static class Builder {
+            private String timestamp;
+            private int status;
+            private String error;
+            private String message;
+            private String path;
+
+            Builder(){}
+
+            public Builder setTimestamp(String timestamp) {
+                this.timestamp = timestamp;
+                return this;
+            }
+
+            Builder setStatus(int status) {
+                this.status = status;
+                return this;
+            }
+
+            Builder setError(String error) {
+                this.error = error;
+                return this;
+            }
+
+            Builder setMessage(String message) {
+                this.message = message;
+                return this;
+            }
+
+            Builder setPath(String path) {
+                this.path = path;
+                return this;
+            }
+
+            public CustomHttpResponse build() {
+                return new CustomHttpResponse(timestamp, status, error, message, path);
+            }
+        }
+
+        @Override
+        public String toString() {
+            return "{" + "\n" +
+                        "\"timestamp\"" + ":" + "\"" + timestamp + "\"" + ",\n" +
+                        "\"status\"" + ":" + status + ",\n" +
+                        "\"error\"" + ":" + "\"" + error + "\"" + ",\n" +
+                        "\"message\"" + ":" + "\"" + message + "\"" + ",\n" +
+                        "\"path\"" + ":" + "\"" + path + "\"" + "\n" +
+                    "}";
+        }
+    }
+  learner_created: true
+- name: src/account/model/UserResponse.java
+  visible: true
+  text: |
+    package account.model;
+
+    import java.util.Collection;
+    import java.util.Objects;
+
+    public class UserResponse {
+        private Long id;
+        private String name;
+        private String lastname;
+        private String email;
+        private Collection<String> roles;
+
+        private UserResponse(Long id, String name, String lastname, String email, Collection<String> authorities) {
+            this.id = id;
+            this.name = name;
+            this.lastname = lastname;
+            this.email = email;
+            this.roles = authorities;
+        }
+
+        public static class Builder {
+
+            private Long id;
+            private String name;
+            private String lastname;
+            private String email;
+            private Collection<String> roles;
+
+            public Builder setId(Long id) {
+                this.id = id;
+                return this;
+            }
+
+            public Builder setName(String name) {
+                this.name = name;
+                return this;
+            }
+
+            public Builder setLastname(String lastname) {
+                this.lastname = lastname;
+                return this;
+            }
+
+            public Builder setEmail(String email) {
+                this.email = email;
+                return this;
+            }
+
+            public Builder setRoles(Collection<String> roles) {
+                this.roles = roles;
+                return this;
+            }
+
+            public UserResponse build() {
+                return new UserResponse(id, name, lastname, email, roles);
+            }
+        }
+
+        public Long getId() {
+            return id;
+        }
+
+        public void setId(Long id) {
+            this.id = id;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getLastname() {
+            return lastname;
+        }
+
+        public void setLastname(String lastname) {
+            this.lastname = lastname;
+        }
+
+        public String getEmail() {
+            return email;
+        }
+
+        public void setEmail(String email) {
+            this.email = email;
+        }
+
+        public Collection<String> getRoles() {
+            return roles;
+        }
+
+        public void setRoles(Collection<String> roles) {
+            this.roles = roles;
+        }
+
+        @Override
+        public String toString() {
+            return "UserResponse{" +
+                    "id=" + id +
+                    ", name='" + name + '\'' +
+                    ", lastname='" + lastname + '\'' +
+                    ", email='" + email + '\'' +
+                    ", roles=" + roles +
+                    '}';
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof UserResponse)) return false;
+            UserResponse that = (UserResponse) o;
+            return Objects.equals(getId(), that.getId());
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(getId());
+        }
+    }
+  learner_created: true
+- name: src/account/exception/CustomErrorHandler.java
+  visible: true
+  text: |
+    package account.exception;
+
+    import org.apache.tomcat.jni.Local;
+    import org.springframework.http.HttpStatus;
+    import org.springframework.http.ResponseEntity;
+    import org.springframework.web.bind.annotation.ControllerAdvice;
+    import org.springframework.web.bind.annotation.ExceptionHandler;
+    import org.springframework.web.context.request.ServletWebRequest;
+
+    import javax.validation.ConstraintViolationException;
+    import java.io.IOException;
+    import java.time.LocalDateTime;
+
+    //@ControllerAdvice
+    //public class CustomErrorHandler {
+    //
+    //    @ExceptionHandler(ConstraintViolationException.class)
+    //    public ResponseEntity<CustomError> handleConstraintViolationException(ConstraintViolationException exception,
+    //                                                                          ServletWebRequest webRequest) {
+    //        CustomError customError = new CustomError();
+    //        customError.setTimestamp(LocalDateTime.now().toString());
+    //        customError.setStatus(HttpStatus.BAD_REQUEST.value());
+    //        customError.setMessage(exception.getMessage());
+    //        customError.setError("Bad request");
+    //        customError.setPath(webRequest.getContextPath().toString());
+    //        return ResponseEntity.badRequest().body(customError);
+    //    }
+    //}
+
+    @ControllerAdvice
+    public class CustomErrorHandler {
+
+        @ExceptionHandler(ConstraintViolationException.class)
+        public void handleConstraintViolationException(ConstraintViolationException exception,
+                                                       ServletWebRequest webRequest) throws IOException {
+            webRequest.getResponse().sendError(HttpStatus.BAD_REQUEST.value(), exception.getMessage());
+        }
+    }
+  learner_created: true
+- name: src/account/model/Payroll.java
+  visible: true
+  text: |
+    package account.model;
+
+    import lombok.Data;
+    import org.springframework.context.annotation.Bean;
+
+    public class Payroll {
+        private String name;
+        private String lastname;
+        private String period;
+        private String salary;
+
+        public Payroll() {
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getLastname() {
+            return lastname;
+        }
+
+        public void setLastname(String lastname) {
+            this.lastname = lastname;
+        }
+
+        public String getPeriod() {
+            return period;
+        }
+
+        public void setPeriod(String period) {
+            this.period = period;
+        }
+
+        public String getSalary() {
+            return salary;
+        }
+
+        public void setSalary(String salary) {
+            this.salary = salary;
+        }
+    }
+  learner_created: true
+- name: src/account/exception/CustomAccessDeniedHandler.java
+  visible: true
+  text: |
+    package account.exception;
+
+    import com.fasterxml.jackson.databind.ObjectMapper;
+    import com.sun.istack.logging.Logger;
+    import org.h2.util.json.JSONObject;
+    import org.springframework.security.access.AccessDeniedException;
+    import org.springframework.security.core.Authentication;
+    import org.springframework.security.core.AuthenticationException;
+    import org.springframework.security.core.context.SecurityContextHolder;
+    import org.springframework.security.web.access.AccessDeniedHandler;
+
+    import javax.servlet.ServletException;
+    import javax.servlet.http.HttpServletRequest;
+    import javax.servlet.http.HttpServletResponse;
+    import java.io.IOException;
+    import java.time.LocalDate;
+    import java.time.LocalDateTime;
+
+    public class CustomAccessDeniedHandler implements AccessDeniedHandler {
+
+        @Override
+        public void handle(HttpServletRequest req,
+                           HttpServletResponse res,
+                           AccessDeniedException accessDeniedException) throws IOException, ServletException {
+
+            CustomHttpResponse.Builder responseBuilder = new CustomHttpResponse.Builder();
+            res.setContentType("application/json;charset=UTF-8");
+            res.setStatus(403);
+            res.getWriter().write(responseBuilder
+                    .setTimestamp(LocalDateTime.now().toString())
+                    .setStatus(403)
+                    .setError("Forbidden")
+                    .setMessage("Access Denied!")
+                    .setPath(req.getRequestURI())
+                    .build().toString());
+        }
+    }
+  learner_created: true
+- name: src/account/controller/EventsController.java
+  visible: true
+  learner_created: true
+- name: src/account/repository/EventsRepository.java
+  visible: true
+  learner_created: true
+- name: src/account/service/EventsService.java
+  visible: true
+  learner_created: true
+- name: src/account/model/UserAccess.java
+  visible: true
+  learner_created: true
+- name: src/account/controller/AccountController.java
+  visible: true
+  text: |
+    package account.controller;
+
+    import account.model.User;
+    import account.service.UserAuthenticationService;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.security.core.context.SecurityContextHolder;
+    import org.springframework.security.core.userdetails.UserDetails;
+    import org.springframework.web.bind.annotation.GetMapping;
+    import org.springframework.web.bind.annotation.PostMapping;
+    import org.springframework.web.bind.annotation.PutMapping;
+    import org.springframework.web.bind.annotation.RestController;
+
+    @RestController
+    public class AccountController {
+
+        @Autowired
+        UserAuthenticationService service;
+
+
+        @GetMapping("api/empl/payment")
+        public User payment() {
+            return service.getPayment();
+        }
+
+        @PostMapping("api/acct/payments")
+        public void uploadPayments() {
+
+        }
+
+        @PutMapping("api/acct/payments")
+        public void updatePayments() {
+
+        }
+
+    }
+  learner_created: false
+- name: src/resources/application.properties
+  visible: true
+  text: |-
+    server.port=28852
+    management.endpoints.web.exposure.include=*
+    management.endpoint.shutdown.enabled=true
+    spring.jackson.serialization.INDENT_OUTPUT=true
+    spring.h2.console.enabled=true
+    spring.datasource.driverClassName=org.h2.Driver
+    spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+    spring.jpa.hibernate.ddl-auto=update
+    spring.h2.console.path=/h2
+    spring.datasource.url=jdbc:h2:file:../service_db
+    spring.datasource.username=sa
+    spring.datasource.password=
+    spring.jpa.open-in-view=false
+    server.error.include-message=always
+  learner_created: false
+- name: src/account/model/UserGroups.java
+  visible: true
+  learner_created: true
+- name: src/account/model/Role.java
+  visible: true
+  learner_created: true
+- name: build.gradle
+  visible: true
+  text: |-
+    plugins {
+        id 'java'
+        id 'org.springframework.boot' version '2.3.1.RELEASE'
+        id 'io.spring.dependency-management' version '1.0.9.RELEASE'
+    }
+
+    repositories {
+        mavenCentral()
+    }
+
+    sourceSets.main.resources.srcDirs = ["src/resources"]
+
+    dependencies {
+        implementation 'org.springframework.boot:spring-boot-starter'
+        implementation 'org.springframework.boot:spring-boot-starter-actuator'
+        implementation 'org.springframework.boot:spring-boot-starter-web'
+        implementation 'org.springframework.boot:spring-boot-starter-security'
+        implementation group: 'org.hibernate', name: 'hibernate-validator', version: '6.1.0.Final'
+
+        // https://mvnrepository.com/artifact/com.h2database/h2
+        implementation group: 'com.h2database', name: 'h2', version: '1.4.200'
+        implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+        compileOnly 'org.projectlombok:lombok:1.18.22'
+        implementation 'javax.validation:validation-api:2.0.1.Final'
+        implementation 'org.javassist:javassist:3.28.0-GA'
+        implementation 'io.springfox:springfox-swagger-ui:3.0.0'
+        implementation 'org.webjars:swagger-ui:4.1.0'
+
+
+
+    }
+  learner_created: false
+- name: src/account/model/Event.java
+  visible: true
+  learner_created: true
+- name: src/account/model/NewPassword.java
+  visible: true
+  text: |
+    package account.model;
+
+    import com.fasterxml.jackson.annotation.JsonProperty;
+    import lombok.*;
+
+    import javax.validation.constraints.Size;
+
+    public class NewPassword {
+
+        @Size(min = 12, message = "The password length must be at least 12 chars!")
+        @JsonProperty("new_password")
+        private String password;
+
+        public NewPassword(String password) {
+            this.password = password;
+        }
+
+        public NewPassword() {
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
+        }
+    }
+  learner_created: false
+feedback_link: https://hyperskill.org/projects/217/stages/1091/implement#comment
+status: Unchecked
+record: -1
